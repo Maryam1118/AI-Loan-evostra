@@ -48,10 +48,25 @@ else:
     with open("columns/gmsc_columns.json") as f:
         all_columns = json.load(f)
 
+# ---------------- FEATURE MAP ---------------- #
+feature_map = {
+    "P_2": "Payment Behavior",
+    "B_1": "Account Balance",
+    "D_39": "Days Past Due",
+    "R_1": "Risk Score",
+    "S_3": "Monthly Spending",
+    "D_41": "Delay Count",
+    "RevolvingUtilizationOfUnsecuredLines": "Credit Utilization",
+    "age": "Age",
+    "NumberOfTime30-59DaysPastDueNotWorse": "Late Payments Count (30–59 Days)",
+    "DebtRatio": "Debt Ratio",
+    "MonthlyIncome": "Monthly Income",
+    "NumberOfOpenCreditLinesAndLoans": "Open Credit Lines"
+}
+
 # ---------------- INPUT ---------------- #
 st.sidebar.header("Input Features")
 
-# ---------------- AMEX (UNCHANGED) ---------------- #
 if dataset == "AMEX":
     payment_score = st.sidebar.slider("Payment Behavior Score", 300, 900, 700)
     balance = st.sidebar.number_input("Account Balance (₹)", 0, 1000000, 40000)
@@ -60,21 +75,24 @@ if dataset == "AMEX":
     spending = st.sidebar.number_input("Monthly Spending (₹)", 0, 100000, 20000)
     delay_count = st.sidebar.number_input("Recent Delay Count", 0, 50, 2)
 
-# ---------------- GMSC (FIXED) ---------------- #
+    user_features = ["P_2", "B_1", "D_39", "R_1", "S_3", "D_41"]
+
 else:
     utilization = st.sidebar.slider("Credit Utilization", 0.0, 1.0, 0.3)
     age = st.sidebar.slider("Age", 18, 80, 30)
-
-    past_due = st.sidebar.number_input(
-        "Late Payments Count (30–59 Days)",
-        min_value=0,
-        max_value=30,
-        value=1
-    )
-
+    past_due = st.sidebar.number_input("Late Payments Count (30–59 Days)", 0, 10, 1)
     debt_ratio = st.sidebar.slider("Debt Ratio", 0.0, 5.0, 0.5)
     income = st.sidebar.number_input("Monthly Income (₹)", 0, 1000000, 50000)
     open_credit = st.sidebar.number_input("Open Credit Lines", 0, 20, 5)
+
+    user_features = [
+        "RevolvingUtilizationOfUnsecuredLines",
+        "age",
+        "NumberOfTime30-59DaysPastDueNotWorse",
+        "DebtRatio",
+        "MonthlyIncome",
+        "NumberOfOpenCreditLinesAndLoans"
+    ]
 
 # ---------------- BUILD INPUT ---------------- #
 full_input = {col: 0 for col in all_columns}
@@ -116,6 +134,7 @@ if st.button("Predict Risk"):
     reasons = []
 
     if dataset == "AMEX":
+
         if days_due >= 60 or delay_count >= 15 or payment_score <= 400:
             high_flag = True
             reasons.append("Severe payment issues detected")
@@ -125,14 +144,14 @@ if st.button("Predict Risk"):
             reasons.append("Moderate payment delays")
 
     else:
-        # ✅ STRONG GMSC LOGIC
-        if past_due >= 10 or utilization > 0.8 or debt_ratio > 1.5:
-            high_flag = True
-            reasons.append("Frequent late payments or high financial stress")
 
-        elif past_due >= 3 or utilization > 0.5:
+        if utilization > 0.8 or past_due > 3 or debt_ratio > 1.5:
+            high_flag = True
+            reasons.append("High financial stress indicators")
+
+        elif utilization > 0.5 or past_due > 1:
             medium_flag = True
-            reasons.append("Moderate credit risk indicators")
+            reasons.append("Moderate financial risk indicators")
 
     # FINAL RISK
     if high_flag:
@@ -169,13 +188,28 @@ if st.button("Predict Risk"):
         })
 
         shap_df["abs"] = shap_df["impact"].abs()
-        shap_df = shap_df.sort_values("abs", ascending=False).head(3)
+        shap_df = shap_df[shap_df["feature"].isin(user_features)]
 
-        for _, row in shap_df.iterrows():
-            if row["impact"] > 0:
-                text = f"{row['feature']} increased risk"
+        top = shap_df.sort_values("abs", ascending=False).head(3)
+
+        for _, row in top.iterrows():
+            name = feature_map.get(row["feature"], row["feature"])
+
+            # Custom logic for explanation
+            if row["feature"] == "B_1":
+                text = "Higher account balance improves financial stability" if balance > 30000 else "Low balance increases risk"
+
+            elif row["feature"] == "P_2":
+                text = "Good payment behavior reduces risk" if payment_score > 650 else "Poor payment behavior increases risk"
+
+            elif row["feature"] == "D_39":
+                text = "Higher overdue days increase risk" if days_due > 30 else "Low overdue days reduce risk"
+
+            elif row["feature"] == "D_41":
+                text = "Frequent delays increase risk" if delay_count > 5 else "Few delays indicate stability"
+
             else:
-                text = f"{row['feature']} reduced risk"
+                text = f"{name} contributed to higher risk" if row["impact"] > 0 else f"{name} helped reduce risk"
 
             st.write(f"• {text}")
             model_reasons.append(text)
@@ -192,14 +226,12 @@ if st.button("Predict Risk"):
     # ---------------- FINAL INTERPRETATION ---------------- #
     st.markdown("### 🧠 Final Interpretation")
 
-    if final_risk == "High Risk":
-        st.write("Customer is high risk due to strong negative financial indicators.")
-
+    if final_risk == "Low Risk":
+        st.write("Customer is overall low risk with stable financial behavior.")
     elif final_risk == "Medium Risk":
-        st.write("Customer has moderate risk and should be reviewed carefully.")
-
+        st.write("Customer shows moderate risk and should be reviewed carefully.")
     else:
-        st.write("Customer is financially stable with low risk.")
+        st.write("Customer is high risk due to significant financial issues.")
 
     for r in model_reasons:
         st.write(f"• {r}")
@@ -222,7 +254,9 @@ if st.button("Predict Risk"):
         "💡 SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced."
     )
 
+       
 
+    
 
    
 
