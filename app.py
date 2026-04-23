@@ -18,19 +18,6 @@ with open("users.json") as f:
 with open("columns/amex_columns.json") as f:
     all_columns = json.load(f)
 
-# ---------------- TOP 6 IMPORTANT FEATURES ---------------- #
-top_features = ["P_2", "B_1", "D_39", "R_1", "S_3", "D_41"]
-
-# ---------------- USER-FRIENDLY NAMES ---------------- #
-feature_names = {
-    "P_2": "💳 Payment Behavior Score",
-    "B_1": "💰 Account Balance",
-    "D_39": "⏳ Days Past Due",
-    "R_1": "⚠️ Risk Indicator Score",
-    "S_3": "🛍️ Spending Pattern",
-    "D_41": "📉 Recent Delay Count"
-}
-
 # ---------------- LOGIN FUNCTION ---------------- #
 def login():
     st.title("🔐 Login Page")
@@ -62,32 +49,40 @@ else:
     # -------- LOAD MODEL -------- #
     model = pickle.load(open("models/amex_model.pkl", "rb"))
 
-    # -------- SIDEBAR INPUT -------- #
+    # -------- USER-FRIENDLY INPUTS -------- #
     st.sidebar.header("Input Features")
-    st.sidebar.info("Enter key financial indicators to predict credit risk.")
+    st.sidebar.info("Enter real-world financial details")
 
     input_data = {}
 
-    for col in top_features:
-        label = feature_names.get(col, col)
-        input_data[col] = st.sidebar.number_input(
-            label,
-            value=0.0,
-            help=f"Model Feature: {col}"
-        )
+    input_data["P_2"] = st.sidebar.slider("💳 Payment Behavior Score", 300, 900, 700)
+    input_data["B_1"] = st.sidebar.number_input("💰 Account Balance (₹)", 0, 1000000, 40000)
+    input_data["D_39"] = st.sidebar.number_input("⏳ Days Past Due", 0, 100, 5)
+    input_data["R_1"] = st.sidebar.slider("⚠️ Risk Indicator Score", 0, 10, 3)
+    input_data["S_3"] = st.sidebar.number_input("🛍️ Monthly Spending (₹)", 0, 100000, 20000)
+    input_data["D_41"] = st.sidebar.number_input("📉 Recent Delay Count", 0, 50, 2)
 
     # -------- PREDICTION -------- #
     if st.button("Predict Risk"):
 
-        # Create full feature set with default = 0
+        # -------- SCALING (VERY IMPORTANT) -------- #
+        scaled_data = {}
+        scaled_data["P_2"] = input_data["P_2"] / 1000
+        scaled_data["B_1"] = input_data["B_1"] / 100000
+        scaled_data["D_39"] = input_data["D_39"] / 100
+        scaled_data["R_1"] = input_data["R_1"] / 10
+        scaled_data["S_3"] = input_data["S_3"] / 100000
+        scaled_data["D_41"] = input_data["D_41"] / 100
+
+        # -------- CREATE FULL FEATURE SET -------- #
         full_input = {col: 0 for col in all_columns}
 
-        # Update only selected features
-        for col in input_data:
-            full_input[col] = input_data[col]
+        for col in scaled_data:
+            full_input[col] = scaled_data[col]
 
         df = pd.DataFrame([full_input])
 
+        # -------- MODEL PREDICTION -------- #
         prob = model.predict_proba(df)[0][1]
 
         # -------- RESULT DISPLAY -------- #
