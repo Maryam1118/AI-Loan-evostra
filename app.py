@@ -1,129 +1,129 @@
-import streamlit as st
-import pickle
-import pandas as pd
-import json
-import shap
+# ---------------- FEATURE NAME MAP ---------------- #
+feature_names_map = {
+    "P_2": "Payment Behavior Score",
+    "B_1": "Account Balance",
+    "D_39": "Days Past Due",
+    "R_1": "Risk Indicator Score",
+    "S_3": "Monthly Spending",
+    "D_41": "Recent Delay Count"
+}
 
-st.set_page_config(page_title="Credit Risk AI", layout="wide")
+# ---------------- PREDICTION ---------------- #
+prob = model.predict_proba(df)[0][1]
 
-# ---------------- LOGIN ---------------- #
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
+st.markdown("## 📊 Prediction Result")
+st.markdown(f"### 🔢 Default Probability: **{prob:.2f}**")
 
-with open("users.json") as f:
-    users = json.load(f)
-
-def login():
-    st.title("🔐 Login")
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if u in users and users[u] == p:
-            st.session_state["logged_in"] = True
-            st.rerun()
-        else:
-            st.error("Invalid credentials")
-
-# ---------------- MAIN ---------------- #
-if not st.session_state["logged_in"]:
-    login()
+# Model risk
+if prob < 0.3:
+    model_risk = "🟢 Low Risk"
+elif prob < 0.7:
+    model_risk = "🟡 Medium Risk"
 else:
+    model_risk = "🔴 High Risk"
 
-    if st.sidebar.button("Logout"):
-        st.session_state["logged_in"] = False
-        st.rerun()
+# ---------------- BUSINESS RULES ---------------- #
+rule_triggered = False
+rule_reasons = []
 
-    st.title("💳 Credit Risk Prediction Dashboard")
+if input_data["D_39"] > 60:
+    rule_triggered = True
+    rule_reasons.append("Customer has very high overdue days")
 
-    # -------- DATASET SELECT -------- #
-    dataset = st.selectbox("Select Dataset", ["AMEX", "GMSC"])
+if input_data["D_41"] > 10:
+    rule_triggered = True
+    rule_reasons.append("Customer frequently delays payments")
 
-    # -------- LOAD MODEL + COLUMNS -------- #
-    if dataset == "AMEX":
-        model = pickle.load(open("models/amex_xgb_model.pkl", "rb"))
-        with open("columns/amex_columns.json") as f:
-            all_columns = json.load(f)
+if input_data["P_2"] < 400:
+    rule_triggered = True
+    rule_reasons.append("Customer has poor payment behavior")
 
+# ---------------- FINAL DECISION ---------------- #
+if rule_triggered:
+    final_risk = "🔴 High Risk"
+    decision = "❌ Reject Loan"
+else:
+    final_risk = model_risk
+    if "Low" in model_risk:
+        decision = "✅ Approve Loan"
+    elif "Medium" in model_risk:
+        decision = "⚠️ Review Manually"
     else:
-        model = pickle.load(open("models/gmsc_xgb_model.pkl", "rb"))
-        with open("columns/gmsc_columns.json") as f:
-            all_columns = json.load(f)
+        decision = "❌ Reject Loan"
 
-    # -------- INPUT UI -------- #
-    st.sidebar.header("Input Features")
+# ---------------- DISPLAY FINAL ---------------- #
+st.markdown("### 📌 Final Decision (Hybrid AI)")
 
-    input_data = {
-        "P_2": st.sidebar.slider("Payment Score", 300, 900, 700),
-        "B_1": st.sidebar.number_input("Balance", 0, 1000000, 40000),
-        "D_39": st.sidebar.number_input("Days Past Due", 0, 100, 5),
-        "R_1": st.sidebar.slider("Risk Score", 0, 10, 3),
-        "S_3": st.sidebar.number_input("Spending", 0, 100000, 20000),
-        "D_41": st.sidebar.number_input("Delay Count", 0, 50, 2)
-    }
+if "High" in final_risk:
+    st.error(final_risk)
+elif "Medium" in final_risk:
+    st.warning(final_risk)
+else:
+    st.success(final_risk)
 
-    if st.button("Predict Risk"):
+# ---------------- MODEL EXPLANATION (SHAP) ---------------- #
+st.markdown("### 🤖 Model Explanation (Data-driven)")
 
-        # -------- SCALING -------- #
-        scaled = {
-            "P_2": input_data["P_2"] / 1000,
-            "B_1": input_data["B_1"] / 100000,
-            "D_39": input_data["D_39"] / 100,
-            "R_1": input_data["R_1"] / 10,
-            "S_3": input_data["S_3"] / 100000,
-            "D_41": input_data["D_41"] / 100
-        }
+try:
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(df)
 
-        # -------- MATCH FEATURES -------- #
-        full_input = {col: 0 for col in all_columns}
-        for col in scaled:
-            if col in full_input:
-                full_input[col] = scaled[col]
+    values = shap_values[0] if isinstance(shap_values, list) else shap_values
 
-        df = pd.DataFrame([full_input])
+    shap_df = pd.DataFrame({
+        "feature": df.columns,
+        "impact": values[0]
+    })
 
-        # -------- PREDICTION -------- #
-        prob = model.predict_proba(df)[0][1]
+    shap_df["abs"] = shap_df["impact"].abs()
+    top_features = shap_df.sort_values("abs", ascending=False).head(3)
 
-        st.subheader("📊 Prediction Result")
-        st.write(f"Default Probability: {prob:.2f}")
+    model_reasons = []
 
-        if prob < 0.3:
-            st.success("Low Risk")
-        elif prob < 0.7:
-            st.warning("Medium Risk")
+    for _, row in top_features.iterrows():
+        name = feature_names_map.get(row["feature"], row["feature"])
+
+        if row["impact"] > 0:
+            st.write(f"🔺 {name} increased the risk")
+            model_reasons.append(f"{name} is contributing to higher risk")
         else:
-            st.error("High Risk")
+            st.write(f"🔻 {name} reduced the risk")
+            model_reasons.append(f"{name} is helping reduce risk")
 
-        # -------- SHAP EXPLANATION -------- #
-        st.subheader("🤖 Model Explanation")
+except:
+    st.info("Model explanation unavailable")
+    model_reasons = []
 
-        try:
-            explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(df)
+# ---------------- BUSINESS RULE EXPLANATION ---------------- #
+if rule_triggered:
+    st.markdown("### ⚠️ Business Rule Explanation")
 
-            values = shap_values[0] if isinstance(shap_values, list) else shap_values
+    for r in rule_reasons:
+        st.write(f"🔴 {r}")
 
-            importance = pd.DataFrame({
-                "feature": df.columns,
-                "impact": values[0]
-            })
+# ---------------- FINAL INTERPRETATION ---------------- #
+st.markdown("### 🧠 Final Interpretation")
 
-            importance["abs"] = importance["impact"].abs()
-            top = importance.sort_values("abs", ascending=False).head(3)
+if "High" in final_risk:
+    st.write("Customer has a **high probability of default** due to:")
+elif "Medium" in final_risk:
+    st.write("Customer shows **moderate financial risk** due to:")
+else:
+    st.write("Customer is **financially stable** due to:")
 
-            for _, row in top.iterrows():
-                if row["impact"] > 0:
-                    st.write(f"🔺 {row['feature']} increased risk")
-                else:
-                    st.write(f"🔻 {row['feature']} reduced risk")
+# Combine explanations
+for r in model_reasons:
+    st.write(f"• {r}")
 
-        except:
-            st.info("Explanation unavailable")
+for r in rule_reasons:
+    st.write(f"• {r}")
 
-        # -------- FINAL LINE -------- #
-        st.markdown("---")
-        st.markdown(
-            "💡 *SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced. I display both to maintain transparency.*"
-        )
-        
+# ---------------- SUGGESTED DECISION ---------------- #
+st.markdown("### 📌 Suggested Decision")
+st.markdown(f"### {decision}")
+
+# ---------------- TRANSPARENCY LINE ---------------- #
+st.markdown("---")
+st.markdown(
+    "💡 *SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced. I display both to maintain transparency.*"
+)
