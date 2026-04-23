@@ -2,6 +2,7 @@ import streamlit as st
 import pickle
 import pandas as pd
 import json
+import shap
 
 # ---------------- PAGE CONFIG ---------------- #
 st.set_page_config(page_title="Credit Risk AI", layout="wide")
@@ -49,7 +50,10 @@ else:
     # -------- LOAD MODEL -------- #
     model = pickle.load(open("models/amex_model.pkl", "rb"))
 
-    # -------- USER-FRIENDLY INPUTS -------- #
+    # -------- SHAP EXPLAINER -------- #
+    explainer = shap.Explainer(model)
+
+    # -------- USER INPUT -------- #
     st.sidebar.header("Input Features")
     st.sidebar.info("Enter real-world financial details")
 
@@ -65,18 +69,18 @@ else:
     # -------- PREDICTION -------- #
     if st.button("Predict Risk"):
 
-        # -------- SCALING (VERY IMPORTANT) -------- #
-        scaled_data = {}
-        scaled_data["P_2"] = input_data["P_2"] / 1000
-        scaled_data["B_1"] = input_data["B_1"] / 100000
-        scaled_data["D_39"] = input_data["D_39"] / 100
-        scaled_data["R_1"] = input_data["R_1"] / 10
-        scaled_data["S_3"] = input_data["S_3"] / 100000
-        scaled_data["D_41"] = input_data["D_41"] / 100
+        # -------- SCALING -------- #
+        scaled_data = {
+            "P_2": input_data["P_2"] / 1000,
+            "B_1": input_data["B_1"] / 100000,
+            "D_39": input_data["D_39"] / 100,
+            "R_1": input_data["R_1"] / 10,
+            "S_3": input_data["S_3"] / 100000,
+            "D_41": input_data["D_41"] / 100
+        }
 
-        # -------- CREATE FULL FEATURE SET -------- #
+        # -------- FULL FEATURE SET -------- #
         full_input = {col: 0 for col in all_columns}
-
         for col in scaled_data:
             full_input[col] = scaled_data[col]
 
@@ -85,7 +89,7 @@ else:
         # -------- MODEL PREDICTION -------- #
         prob = model.predict_proba(df)[0][1]
 
-        # -------- RESULT DISPLAY -------- #
+        # -------- RESULT -------- #
         st.markdown("## 📊 Prediction Result")
         st.markdown(f"### 🔢 Default Probability: **{prob:.2f}**")
 
@@ -116,6 +120,32 @@ else:
         - **Model Confidence:** **{prob:.2%}**
         """)
 
-        # -------- FINAL DECISION -------- #
-        st.markdown("### 📌 Suggested Decision")
-        st.markdown(f"### {decision}")
+        # -------- SHAP EXPLANATION -------- #
+        shap_values = explainer(df)
+
+        st.markdown("### 🤖 AI Explanation (Why this prediction?)")
+
+        shap_df = pd.DataFrame({
+            "feature": df.columns,
+            "impact": shap_values.values[0]
+        })
+
+        shap_df["abs"] = shap_df["impact"].abs()
+        top_features = shap_df.sort_values("abs", ascending=False).head(3)
+
+        feature_names_map = {
+            "P_2": "Payment Behavior Score",
+            "B_1": "Account Balance",
+            "D_39": "Days Past Due",
+            "R_1": "Risk Indicator Score",
+            "S_3": "Spending Pattern",
+            "D_41": "Recent Delay Count"
+        }
+
+        for _, row in top_features.iterrows():
+            fname = feature_names_map.get(row["feature"], row["feature"])
+
+            if row["impact"] > 0:
+                st.write(f"🔺 {fname} increased the risk")
+            else:
+                st.write(f"🔻 {fname} reduced the risk")
