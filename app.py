@@ -16,7 +16,7 @@ if "logged_in" not in st.session_state:
 with open("users.json") as f:
     users = json.load(f)
 
-# ---------------- LOAD COLUMNS ---------------- #
+# ---------------- LOAD FEATURE COLUMNS ---------------- #
 with open("columns/amex_columns.json") as f:
     all_columns = json.load(f)
 
@@ -62,7 +62,7 @@ else:
         "D_41": st.sidebar.number_input("📉 Recent Delay Count", 0, 50, 2)
     }
 
-    # ---------------- PREDICT ---------------- #
+    # ---------------- PREDICTION ---------------- #
     if st.button("Predict Risk"):
 
         # -------- SCALING -------- #
@@ -88,48 +88,66 @@ else:
         st.markdown("## 📊 Prediction Result")
         st.markdown(f"### 🔢 Default Probability: **{prob:.2f}**")
 
-        # -------- RISK -------- #
+        # -------- MODEL RISK -------- #
         if prob < 0.3:
-            risk = "🟢 Low Risk"
-            explanation = "Customer is financially stable."
-            decision = "✅ Approve Loan"
-            st.success(risk)
-
+            model_risk = "🟢 Low Risk"
         elif prob < 0.7:
-            risk = "🟡 Medium Risk"
-            explanation = "Moderate financial risk detected."
-            decision = "⚠️ Review Manually"
-            st.warning(risk)
-
+            model_risk = "🟡 Medium Risk"
         else:
-            risk = "🔴 High Risk"
-            explanation = "High probability of default."
+            model_risk = "🔴 High Risk"
+
+        st.markdown(f"**Model Prediction:** {model_risk}")
+
+        # -------- BUSINESS RULES -------- #
+        rule_triggered = False
+        rule_reasons = []
+
+        if input_data["D_39"] > 60:
+            rule_triggered = True
+            rule_reasons.append("Days past due > 60")
+
+        if input_data["D_41"] > 10:
+            rule_triggered = True
+            rule_reasons.append("Frequent delays")
+
+        if input_data["P_2"] < 400:
+            rule_triggered = True
+            rule_reasons.append("Poor payment behavior")
+
+        # -------- FINAL DECISION -------- #
+        if rule_triggered:
+            final_risk = "🔴 High Risk"
             decision = "❌ Reject Loan"
-            st.error(risk)
+        else:
+            final_risk = model_risk
+            if "Low" in model_risk:
+                decision = "✅ Approve Loan"
+            elif "Medium" in model_risk:
+                decision = "⚠️ Review Manually"
+            else:
+                decision = "❌ Reject Loan"
 
-        # -------- INTERPRETATION -------- #
-        st.markdown("### 🧠 Interpretation")
-        st.markdown(f"""
-        - **Risk Level:** {risk}  
-        - **Meaning:** {explanation}  
-        - **Model Confidence:** **{prob:.2%}**
-        """)
+        # -------- DISPLAY FINAL RESULT -------- #
+        st.markdown("### 📌 Final Decision (Hybrid AI)")
+        if "High" in final_risk:
+            st.error(final_risk)
+        elif "Medium" in final_risk:
+            st.warning(final_risk)
+        else:
+            st.success(final_risk)
 
-        # ---------------- SAFE SHAP ---------------- #
-        st.markdown("### 🤖 AI Explanation (Why this prediction?)")
+        # ---------------- MODEL EXPLANATION (SHAP) ---------------- #
+        st.markdown("### 🤖 Model Explanation (Data-driven)")
 
         try:
-            # Small background for speed
             background = np.zeros((1, df.shape[1]))
-
             explainer = shap.KernelExplainer(model.predict_proba, background)
             shap_values = explainer.shap_values(df, nsamples=50)
 
-            # -------- UNIVERSAL HANDLING -------- #
             try:
-                values = shap_values[1][0]  # multi-class
+                values = shap_values[1][0]
             except:
-                values = shap_values.values[0]  # new SHAP
+                values = shap_values.values[0]
 
             shap_df = pd.DataFrame({
                 "feature": df.columns,
@@ -149,29 +167,27 @@ else:
             }
 
             for _, row in top_features.iterrows():
-                fname = feature_names_map.get(row["feature"], row["feature"])
-
+                name = feature_names_map.get(row["feature"], row["feature"])
                 if row["impact"] > 0:
-                    st.write(f"🔺 {fname} increased the risk")
+                    st.write(f"🔺 {name} increased the risk")
                 else:
-                    st.write(f"🔻 {fname} reduced the risk")
+                    st.write(f"🔻 {name} reduced the risk")
 
-        except Exception as e:
-            # -------- FALLBACK (NEVER CRASH) -------- #
-            st.info("Showing rule-based explanation (fallback mode):")
+        except:
+            st.info("Model explanation unavailable.")
 
-            if input_data["D_39"] > 20:
-                st.write("🔺 High days past due increases risk")
+        # ---------------- RULE EXPLANATION ---------------- #
+        if rule_triggered:
+            st.markdown("### ⚠️ Business Rule Explanation")
+            for r in rule_reasons:
+                st.write(f"🔴 {r} triggered high risk override")
 
-            if input_data["D_41"] > 5:
-                st.write("🔺 Frequent delays increase risk")
-
-            if input_data["P_2"] < 500:
-                st.write("🔺 Poor payment behavior increases risk")
-
-            if input_data["B_1"] < 10000:
-                st.write("🔺 Low balance indicates instability")
-
-        # -------- FINAL DECISION -------- #
+        # ---------------- FINAL DECISION ---------------- #
         st.markdown("### 📌 Suggested Decision")
         st.markdown(f"### {decision}")
+
+        # ---------------- TRANSPARENCY LINE ---------------- #
+        st.markdown("---")
+        st.markdown(
+            "💡 *SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced. I display both to maintain transparency.*"
+        )
