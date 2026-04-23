@@ -14,7 +14,11 @@ if "logged_in" not in st.session_state:
 with open("users.json") as f:
     users = json.load(f)
 
-# ---------------- TOP 6 FEATURES ---------------- #
+# ---------------- LOAD ALL MODEL FEATURES ---------------- #
+with open("columns/amex_columns.json") as f:
+    all_columns = json.load(f)
+
+# ---------------- TOP 6 IMPORTANT FEATURES ---------------- #
 top_features = ["P_2", "B_1", "D_39", "R_1", "S_3", "D_41"]
 
 # ---------------- USER-FRIENDLY NAMES ---------------- #
@@ -66,7 +70,6 @@ else:
 
     for col in top_features:
         label = feature_names.get(col, col)
-
         input_data[col] = st.sidebar.number_input(
             label,
             value=0.0,
@@ -76,14 +79,14 @@ else:
     # -------- PREDICTION -------- #
     if st.button("Predict Risk"):
 
-        df = pd.DataFrame([input_data])
+        # Create full feature set with default = 0
+        full_input = {col: 0 for col in all_columns}
 
-        # Ensure correct feature alignment
-        try:
-            model_features = model.get_booster().feature_names
-            df = df.reindex(columns=model_features, fill_value=0)
-        except:
-            pass
+        # Update only selected features
+        for col in input_data:
+            full_input[col] = input_data[col]
+
+        df = pd.DataFrame([full_input])
 
         prob = model.predict_proba(df)[0][1]
 
