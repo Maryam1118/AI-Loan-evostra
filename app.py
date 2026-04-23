@@ -38,21 +38,27 @@ st.title("💳 Credit Default Prediction Dashboard")
 
 dataset = st.selectbox("Select Dataset", ["AMEX", "GMSC"])
 
-# ---------------- LOAD MODEL + COLUMNS ---------------- #
-try:
-    if dataset == "AMEX":
-        model = pickle.load(open("models/amex_xgb_model.pkl", "rb"))
-        with open("columns/amex_columns.json") as f:
-            all_columns = json.load(f)
-    else:
-        model = pickle.load(open("models/gmsc_xgb_model.pkl", "rb"))
-        with open("columns/gmsc_columns.json") as f:
-            all_columns = json.load(f)
-except Exception as e:
-    st.error(f"Error loading model/columns: {e}")
-    st.stop()
+# ---------------- LOAD MODEL ---------------- #
+if dataset == "AMEX":
+    model = pickle.load(open("models/amex_xgb_model.pkl", "rb"))
+    with open("columns/amex_columns.json") as f:
+        all_columns = json.load(f)
+else:
+    model = pickle.load(open("models/gmsc_xgb_model.pkl", "rb"))
+    with open("columns/gmsc_columns.json") as f:
+        all_columns = json.load(f)
 
-# ---------------- INPUT UI ---------------- #
+# ---------------- USER-FRIENDLY MAP ---------------- #
+feature_map = {
+    "P_2": "Payment Behavior",
+    "B_1": "Account Balance",
+    "D_39": "Days Past Due",
+    "R_1": "Risk Score",
+    "S_3": "Monthly Spending",
+    "D_41": "Delay Count"
+}
+
+# ---------------- INPUT ---------------- #
 st.sidebar.header("Input Features")
 
 if dataset == "AMEX":
@@ -65,8 +71,8 @@ if dataset == "AMEX":
 
     user_features = ["P_2", "B_1", "D_39", "R_1", "S_3", "D_41"]
 
-elif dataset == "GMSC":
-    utilization = st.sidebar.slider("Credit Utilization (%)", 0.0, 1.0, 0.3)
+else:
+    utilization = st.sidebar.slider("Credit Utilization", 0.0, 1.0, 0.3)
     age = st.sidebar.slider("Age", 18, 80, 30)
     past_due = st.sidebar.number_input("30-59 Days Past Due", 0, 10, 1)
     debt_ratio = st.sidebar.slider("Debt Ratio", 0.0, 5.0, 0.5)
@@ -82,7 +88,7 @@ elif dataset == "GMSC":
         "NumberOfOpenCreditLinesAndLoans"
     ]
 
-# ---------------- BUILD FULL INPUT ---------------- #
+# ---------------- BUILD INPUT ---------------- #
 full_input = {col: 0 for col in all_columns}
 
 if dataset == "AMEX":
@@ -93,7 +99,7 @@ if dataset == "AMEX":
     full_input["S_3"] = spending / 100000
     full_input["D_41"] = delay_count / 100
 
-elif dataset == "GMSC":
+else:
     full_input["RevolvingUtilizationOfUnsecuredLines"] = utilization
     full_input["age"] = age
     full_input["NumberOfTime30-59DaysPastDueNotWorse"] = past_due
@@ -103,68 +109,23 @@ elif dataset == "GMSC":
 
 df = pd.DataFrame([full_input])
 
-# ---------------- PREDICTION ---------------- #
+# ---------------- PREDICT ---------------- #
 if st.button("Predict Risk"):
 
     prob = model.predict_proba(df)[0][1]
 
     st.markdown("## 📊 Prediction Result")
     st.write(f"Default Probability: {prob:.2f}")
-    st.progress(int(prob * 100))
 
-    # MODEL RISK
     if prob < 0.3:
-        model_risk = "Low Risk"
+        risk = "Low Risk"
+        st.success("🟢 Low Risk")
     elif prob < 0.7:
-        model_risk = "Medium Risk"
-    else:
-        model_risk = "High Risk"
-
-    # ---------------- BUSINESS RULES ---------------- #
-    rule_triggered = False
-    rule_reasons = []
-
-    if dataset == "AMEX":
-        if days_due > 60:
-            rule_triggered = True
-            rule_reasons.append("Very high overdue days")
-        if delay_count > 10:
-            rule_triggered = True
-            rule_reasons.append("Frequent payment delays")
-        if payment_score < 400:
-            rule_triggered = True
-            rule_reasons.append("Poor payment behavior")
-
-    elif dataset == "GMSC":
-        if utilization > 0.8:
-            rule_triggered = True
-            rule_reasons.append("High credit utilization")
-        if past_due > 3:
-            rule_triggered = True
-            rule_reasons.append("Frequent past dues")
-        if debt_ratio > 1.5:
-            rule_triggered = True
-            rule_reasons.append("High debt ratio")
-
-    # FINAL DECISION
-    if rule_triggered:
-        final_risk = "High Risk"
-        decision = "❌ Reject Loan"
-    else:
-        final_risk = model_risk
-        decision = (
-            "✅ Approve Loan" if model_risk == "Low Risk"
-            else "⚠️ Review Manually" if model_risk == "Medium Risk"
-            else "❌ Reject Loan"
-        )
-
-    # DISPLAY
-    if final_risk == "High Risk":
-        st.error("🔴 High Risk")
-    elif final_risk == "Medium Risk":
+        risk = "Medium Risk"
         st.warning("🟡 Medium Risk")
     else:
-        st.success("🟢 Low Risk")
+        risk = "High Risk"
+        st.error("🔴 High Risk")
 
     # ---------------- SHAP ---------------- #
     st.markdown("### 🤖 Model Explanation")
@@ -172,7 +133,6 @@ if st.button("Predict Risk"):
     try:
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(df)
-
         values = shap_values[0] if isinstance(shap_values, list) else shap_values
 
         shap_df = pd.DataFrame({
@@ -182,46 +142,57 @@ if st.button("Predict Risk"):
 
         shap_df["abs"] = shap_df["impact"].abs()
 
-        # 👉 ONLY show user features (fix D_42 issue)
         shap_df = shap_df[shap_df["feature"].isin(user_features)]
-
         top = shap_df.sort_values("abs", ascending=False).head(3)
 
-        model_reasons = []
+        explanations = []
 
         for _, row in top.iterrows():
+            name = feature_map.get(row["feature"], row["feature"])
+
             if row["impact"] > 0:
-                st.write(f"🔺 {row['feature']} increased risk")
-                model_reasons.append(f"{row['feature']} increased risk")
+                text = f"{name} increased risk"
+                st.write(f"🔺 {text}")
             else:
-                st.write(f"🔻 {row['feature']} reduced risk")
-                model_reasons.append(f"{row['feature']} reduced risk")
+                text = f"{name} reduced risk"
+                st.write(f"🔻 {text}")
+
+            explanations.append(text)
 
     except:
-        st.info("Model explanation unavailable")
-        model_reasons = []
-
-    # ---------------- BUSINESS EXPLANATION ---------------- #
-    if rule_triggered:
-        st.markdown("### ⚠️ Business Rule Explanation")
-        for r in rule_reasons:
-            st.write(f"🔴 {r}")
+        st.info("Explanation unavailable")
+        explanations = []
 
     # ---------------- FINAL INTERPRETATION ---------------- #
     st.markdown("### 🧠 Final Interpretation")
 
-    for r in model_reasons:
-        st.write(f"• {r}")
-    for r in rule_reasons:
-        st.write(f"• {r}")
+    if risk == "Low Risk":
+        st.write("Customer is low risk due to:")
+    elif risk == "Medium Risk":
+        st.write("Customer has moderate risk due to:")
+    else:
+        st.write("Customer has high risk due to:")
+
+    for e in explanations:
+        st.write(f"• {e}")
 
     # ---------------- DECISION ---------------- #
     st.markdown("### 📌 Suggested Decision")
-    st.write(decision)
 
-    # ---------------- FINAL NOTE ---------------- #
+    if risk == "Low Risk":
+        st.write("✅ Approve Loan")
+    elif risk == "Medium Risk":
+        st.write("⚠️ Review Manually")
+    else:
+        st.write("❌ Reject Loan")
+
+    # ---------------- NOTE ---------------- #
     st.markdown("---")
     st.markdown(
         "💡 SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced. I display both to maintain transparency."
     )
-   
+
+
+    
+            
+    
