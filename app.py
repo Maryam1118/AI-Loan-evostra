@@ -46,8 +46,8 @@ else:
     st.title("💳 Credit Default Prediction Dashboard")
     st.markdown("### Enter Customer Financial Details")
 
-    # Load model
-    model = pickle.load(open("models/amex_model.pkl", "rb"))
+    # ---------------- LOAD MODEL ---------------- #
+    model = pickle.load(open("models/xgb_model.pkl", "rb"))
 
     # ---------------- INPUT ---------------- #
     st.sidebar.header("Input Features")
@@ -62,10 +62,9 @@ else:
         "D_41": st.sidebar.number_input("📉 Recent Delay Count", 0, 50, 2)
     }
 
-    # ---------------- PREDICTION ---------------- #
     if st.button("Predict Risk"):
 
-        # -------- SCALING -------- #
+        # ---------------- SCALING ---------------- #
         scaled_data = {
             "P_2": input_data["P_2"] / 1000,
             "B_1": input_data["B_1"] / 100000,
@@ -75,20 +74,20 @@ else:
             "D_41": input_data["D_41"] / 100
         }
 
-        # -------- FULL FEATURE VECTOR -------- #
+        # ---------------- FULL FEATURE MATCH ---------------- #
         full_input = {col: 0 for col in all_columns}
         for col in scaled_data:
             full_input[col] = scaled_data[col]
 
         df = pd.DataFrame([full_input])
 
-        # -------- MODEL PREDICTION -------- #
+        # ---------------- PREDICTION ---------------- #
         prob = model.predict_proba(df)[0][1]
 
         st.markdown("## 📊 Prediction Result")
         st.markdown(f"### 🔢 Default Probability: **{prob:.2f}**")
 
-        # -------- MODEL RISK -------- #
+        # Model risk
         if prob < 0.3:
             model_risk = "🟢 Low Risk"
         elif prob < 0.7:
@@ -98,23 +97,23 @@ else:
 
         st.markdown(f"**Model Prediction:** {model_risk}")
 
-        # -------- BUSINESS RULES -------- #
+        # ---------------- BUSINESS RULES ---------------- #
         rule_triggered = False
         rule_reasons = []
 
         if input_data["D_39"] > 60:
             rule_triggered = True
-            rule_reasons.append("Days past due > 60")
+            rule_reasons.append("Days past due is very high")
 
         if input_data["D_41"] > 10:
             rule_triggered = True
-            rule_reasons.append("Frequent delays")
+            rule_reasons.append("Frequent payment delays")
 
         if input_data["P_2"] < 400:
             rule_triggered = True
             rule_reasons.append("Poor payment behavior")
 
-        # -------- FINAL DECISION -------- #
+        # ---------------- FINAL DECISION ---------------- #
         if rule_triggered:
             final_risk = "🔴 High Risk"
             decision = "❌ Reject Loan"
@@ -127,7 +126,6 @@ else:
             else:
                 decision = "❌ Reject Loan"
 
-        # -------- DISPLAY FINAL RESULT -------- #
         st.markdown("### 📌 Final Decision (Hybrid AI)")
         if "High" in final_risk:
             st.error(final_risk)
@@ -136,22 +134,18 @@ else:
         else:
             st.success(final_risk)
 
-        # ---------------- MODEL EXPLANATION (SHAP) ---------------- #
+        # ---------------- SHAP EXPLANATION ---------------- #
         st.markdown("### 🤖 Model Explanation (Data-driven)")
 
         try:
-            background = np.zeros((1, df.shape[1]))
-            explainer = shap.KernelExplainer(model.predict_proba, background)
-            shap_values = explainer.shap_values(df, nsamples=50)
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(df)
 
-            try:
-                values = shap_values[1][0]
-            except:
-                values = shap_values.values[0]
+            values = shap_values[0] if isinstance(shap_values, list) else shap_values
 
             shap_df = pd.DataFrame({
                 "feature": df.columns,
-                "impact": values
+                "impact": values[0]
             })
 
             shap_df["abs"] = shap_df["impact"].abs()
@@ -174,13 +168,13 @@ else:
                     st.write(f"🔻 {name} reduced the risk")
 
         except:
-            st.info("Model explanation unavailable.")
+            st.warning("⚠️ SHAP explanation failed.")
 
-        # ---------------- RULE EXPLANATION ---------------- #
+        # ---------------- BUSINESS RULE EXPLANATION ---------------- #
         if rule_triggered:
             st.markdown("### ⚠️ Business Rule Explanation")
             for r in rule_reasons:
-                st.write(f"🔴 {r} triggered high risk override")
+                st.write(f"🔴 {r}")
 
         # ---------------- FINAL DECISION ---------------- #
         st.markdown("### 📌 Suggested Decision")
@@ -191,3 +185,4 @@ else:
         st.markdown(
             "💡 *SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced. I display both to maintain transparency.*"
         )
+                
