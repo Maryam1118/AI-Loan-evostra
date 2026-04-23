@@ -58,7 +58,7 @@ feature_map = {
     "D_41": "Delay Count",
     "RevolvingUtilizationOfUnsecuredLines": "Credit Utilization",
     "age": "Age",
-    "NumberOfTime30-59DaysPastDueNotWorse": "30-59 Days Past Due",
+    "NumberOfTime30-59DaysPastDueNotWorse": "Late Payments Count (30–59 Days)",
     "DebtRatio": "Debt Ratio",
     "MonthlyIncome": "Monthly Income",
     "NumberOfOpenCreditLinesAndLoans": "Open Credit Lines"
@@ -80,7 +80,7 @@ if dataset == "AMEX":
 else:
     utilization = st.sidebar.slider("Credit Utilization", 0.0, 1.0, 0.3)
     age = st.sidebar.slider("Age", 18, 80, 30)
-    past_due = st.sidebar.number_input("30-59 Days Past Due", 0, 10, 1)
+    past_due = st.sidebar.number_input("30-59 Days Past Due", 0, 30, 1)
     debt_ratio = st.sidebar.slider("Debt Ratio", 0.0, 5.0, 0.5)
     income = st.sidebar.number_input("Monthly Income (₹)", 0, 1000000, 50000)
     open_credit = st.sidebar.number_input("Open Credit Lines", 0, 20, 5)
