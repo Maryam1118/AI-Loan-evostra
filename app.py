@@ -3,6 +3,7 @@ import pickle
 import pandas as pd
 import json
 import shap
+import numpy as np
 
 # ---------------- PAGE CONFIG ---------------- #
 st.set_page_config(page_title="Credit Risk AI", layout="wide")
@@ -15,11 +16,11 @@ if "logged_in" not in st.session_state:
 with open("users.json") as f:
     users = json.load(f)
 
-# ---------------- LOAD ALL MODEL FEATURES ---------------- #
+# ---------------- LOAD FEATURE COLUMNS ---------------- #
 with open("columns/amex_columns.json") as f:
     all_columns = json.load(f)
 
-# ---------------- LOGIN FUNCTION ---------------- #
+# ---------------- LOGIN ---------------- #
 def login():
     st.title("🔐 Login Page")
 
@@ -38,22 +39,18 @@ if not st.session_state["logged_in"]:
     login()
 
 else:
-    # -------- LOGOUT -------- #
+    # Logout
     if st.sidebar.button("Logout"):
         st.session_state["logged_in"] = False
         st.rerun()
 
-    # -------- TITLE -------- #
     st.title("💳 Credit Default Prediction Dashboard")
     st.markdown("### Enter Customer Financial Details")
 
-    # -------- LOAD MODEL -------- #
+    # Load model
     model = pickle.load(open("models/amex_model.pkl", "rb"))
 
-    # -------- SHAP EXPLAINER -------- #
-    explainer = shap.Explainer(model)
-
-    # -------- USER INPUT -------- #
+    # ---------------- INPUT ---------------- #
     st.sidebar.header("Input Features")
     st.sidebar.info("Enter real-world financial details")
 
@@ -66,7 +63,7 @@ else:
     input_data["S_3"] = st.sidebar.number_input("🛍️ Monthly Spending (₹)", 0, 100000, 20000)
     input_data["D_41"] = st.sidebar.number_input("📉 Recent Delay Count", 0, 50, 2)
 
-    # -------- PREDICTION -------- #
+    # ---------------- PREDICTION ---------------- #
     if st.button("Predict Risk"):
 
         # -------- SCALING -------- #
@@ -89,7 +86,6 @@ else:
         # -------- MODEL PREDICTION -------- #
         prob = model.predict_proba(df)[0][1]
 
-        # -------- RESULT -------- #
         st.markdown("## 📊 Prediction Result")
         st.markdown(f"### 🔢 Default Probability: **{prob:.2f}**")
 
@@ -120,14 +116,21 @@ else:
         - **Model Confidence:** **{prob:.2%}**
         """)
 
-        # -------- SHAP EXPLANATION -------- #
-        shap_values = explainer(df)
-
+        # ---------------- SHAP EXPLANATION ---------------- #
         st.markdown("### 🤖 AI Explanation (Why this prediction?)")
+
+        # Use small background sample for speed
+        background = np.zeros((1, len(df.columns)))
+
+        explainer = shap.KernelExplainer(model.predict_proba, background)
+        shap_values = explainer.shap_values(df, nsamples=50)
+
+        # Take class 1 (default)
+        values = shap_values[1][0]
 
         shap_df = pd.DataFrame({
             "feature": df.columns,
-            "impact": shap_values.values[0]
+            "impact": values
         })
 
         shap_df["abs"] = shap_df["impact"].abs()
@@ -149,3 +152,7 @@ else:
                 st.write(f"🔺 {fname} increased the risk")
             else:
                 st.write(f"🔻 {fname} reduced the risk")
+
+        # -------- FINAL DECISION -------- #
+        st.markdown("### 📌 Suggested Decision")
+        st.markdown(f"### {decision}")
