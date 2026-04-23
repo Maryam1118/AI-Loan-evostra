@@ -6,7 +6,7 @@ import shap
 
 st.set_page_config(page_title="Credit Risk AI", layout="wide")
 
-# ---------------- LOGIN SYSTEM ---------------- #
+# ---------------- LOGIN ---------------- #
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
@@ -15,17 +15,16 @@ with open("users.json") as f:
 
 def login():
     st.title("🔐 Login Page")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        if username in users and users[username] == password:
+        if u in users and users[u] == p:
             st.session_state["logged_in"] = True
             st.rerun()
         else:
             st.error("Invalid credentials")
 
-# ---------------- MAIN APP ---------------- #
 if not st.session_state["logged_in"]:
     login()
     st.stop()
@@ -35,22 +34,26 @@ if st.sidebar.button("Logout"):
     st.session_state["logged_in"] = False
     st.rerun()
 
+# ---------------- MAIN ---------------- #
 st.title("💳 Credit Default Prediction Dashboard")
 
-# ---------------- DATASET SELECT ---------------- #
 dataset = st.selectbox("Select Dataset", ["AMEX", "GMSC"])
 
-# ---------------- LOAD MODEL SAFELY ---------------- #
+# ---------------- LOAD MODEL ---------------- #
 try:
     if dataset == "AMEX":
         model = pickle.load(open("models/amex_xgb_model.pkl", "rb"))
+        with open("columns/amex_columns.json") as f:
+            all_columns = json.load(f)
     else:
         model = pickle.load(open("models/gmsc_xgb_model.pkl", "rb"))
+        with open("columns/gmsc_columns.json") as f:
+            all_columns = json.load(f)
 except Exception as e:
-    st.error(f"Model loading error: {e}")
+    st.error(f"Model/Column loading error: {e}")
     st.stop()
 
-# ---------------- USER INPUT ---------------- #
+# ---------------- INPUT UI ---------------- #
 st.sidebar.header("Input Features")
 
 payment_score = st.sidebar.slider("Payment Behavior Score", 300, 900, 700)
@@ -60,18 +63,17 @@ risk_score = st.sidebar.slider("Risk Indicator Score", 0, 10, 3)
 spending = st.sidebar.number_input("Monthly Spending (₹)", 0, 100000, 20000)
 delay_count = st.sidebar.number_input("Recent Delay Count", 0, 50, 2)
 
-# ---------------- FEATURE MAP ---------------- #
-input_data = {
-    "P_2": payment_score / 1000,
-    "B_1": balance / 100000,
-    "D_39": days_due / 100,
-    "R_1": risk_score / 10,
-    "S_3": spending / 100000,
-    "D_41": delay_count / 100
-}
+# ---------------- FEATURE BUILD ---------------- #
+full_input = {col: 0 for col in all_columns}
 
-# ---------------- CREATE DF SAFELY ---------------- #
-df = pd.DataFrame([input_data])
+full_input["P_2"] = payment_score / 1000
+full_input["B_1"] = balance / 100000
+full_input["D_39"] = days_due / 100
+full_input["R_1"] = risk_score / 10
+full_input["S_3"] = spending / 100000
+full_input["D_41"] = delay_count / 100
+
+df = pd.DataFrame([full_input])
 
 # ---------------- PREDICTION ---------------- #
 if st.button("Predict Risk"):
@@ -84,8 +86,9 @@ if st.button("Predict Risk"):
 
     st.markdown("## 📊 Prediction Result")
     st.write(f"Default Probability: {prob:.2f}")
+    st.progress(int(prob * 100))
 
-    # ---------------- MODEL RISK ---------------- #
+    # MODEL RISK
     if prob < 0.3:
         model_risk = "Low Risk"
     elif prob < 0.7:
@@ -122,7 +125,7 @@ if st.button("Predict Risk"):
         else:
             decision = "❌ Reject Loan"
 
-    # ---------------- DISPLAY RESULT ---------------- #
+    # ---------------- DISPLAY ---------------- #
     if final_risk == "High Risk":
         st.error("🔴 High Risk")
     elif final_risk == "Medium Risk":
@@ -130,15 +133,15 @@ if st.button("Predict Risk"):
     else:
         st.success("🟢 Low Risk")
 
-    # ---------------- SHAP EXPLANATION ---------------- #
+    # ---------------- SHAP ---------------- #
     st.markdown("### 🤖 Model Explanation")
 
     feature_map = {
         "P_2": "Payment Behavior",
-        "B_1": "Balance",
-        "D_39": "Days Due",
+        "B_1": "Account Balance",
+        "D_39": "Days Past Due",
         "R_1": "Risk Score",
-        "S_3": "Spending",
+        "S_3": "Monthly Spending",
         "D_41": "Delay Count"
     }
 
@@ -194,13 +197,14 @@ if st.button("Predict Risk"):
     for r in rule_reasons:
         st.write(f"• {r}")
 
-    # ---------------- FINAL DECISION ---------------- #
+    # ---------------- DECISION ---------------- #
     st.markdown("### 📌 Suggested Decision")
     st.write(decision)
 
-    # ---------------- TRANSPARENCY LINE ---------------- #
+    # ---------------- NOTE ---------------- #
     st.markdown("---")
     st.markdown(
         "💡 SHAP explains the model prediction, while business rules ensure critical risk conditions are enforced. I display both to maintain transparency."
     )
-        
+               
+    
