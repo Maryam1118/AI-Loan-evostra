@@ -54,8 +54,8 @@ for i, ((metric, value), color) in enumerate(zip(METRICS.items(), colors)):
     percent = int(value * 100)
 
     with cols[i]:
-        html_code = f"""
-        <div style="text-align:center;">
+        st.components.v1.html(f"""
+        <div style="text-align:center; font-family:sans-serif;">
         
             <div style="
                 width:80px;
@@ -88,9 +88,7 @@ for i, ((metric, value), color) in enumerate(zip(METRICS.items(), colors)):
             </p>
 
         </div>
-        """
-
-        st.markdown(html_code, unsafe_allow_html=True)
+        """, height=120)
 
 dataset = st.selectbox("Select Dataset", ["AMEX", "GMSC"])
 
