@@ -51,26 +51,42 @@ cols = st.columns(6)
 colors = ["#00e5ff", "#7c4dff", "#00e676", "#ffab00", "#ff9100", "#00e5ff"]
 
 for i, ((metric, value), color) in enumerate(zip(METRICS.items(), colors)):
+    percent = int(value * 100)
+
     with cols[i]:
         st.markdown(f"""
-        <div style="
-            text-align:center;
-            padding:8px;
-            border-radius:10px;
-            background:#0f172a;
-            color:white;
-            height:90px;
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            box-shadow:0 2px 8px rgba(0,0,0,0.2);
-        ">
-            <h3 style="color:{color}; margin:0; font-size:18px;">
-                {int(value*100)}%
-            </h3>
-            <p style="margin:0; font-size:11px;">
+        <div style="text-align:center;">
+        
+            <div style="
+                width:80px;
+                height:80px;
+                border-radius:50%;
+                background: conic-gradient({color} {percent}%, #1f2937 {percent}%);
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                margin:auto;
+            ">
+                <div style="
+                    width:60px;
+                    height:60px;
+                    border-radius:50%;
+                    background:#0f172a;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    color:white;
+                    font-size:14px;
+                    font-weight:bold;
+                ">
+                    {percent}%
+                </div>
+            </div>
+
+            <p style="margin-top:6px; font-size:12px; text-align:center;">
                 {metric}
             </p>
+
         </div>
         """, unsafe_allow_html=True)
 
