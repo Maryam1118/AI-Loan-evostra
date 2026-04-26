@@ -4,13 +4,21 @@ import pandas as pd
 import json
 import shap
 # ---------------- MODEL METRICS ---------------- #
-METRICS = {
-    "AUC-ROC": 0.94,
-    "Precision": 0.88,
+
+AMEX_METRICS = {
+    "Accuracy": 0.8631,
+    "AUC": 0.9408,
+    "Precision": 0.89,
     "Recall": 0.86,
-    "F1 Score": 0.89,
-    "MCC": 0.84,
-    "Brier": 0.93
+    "F1 Score": 0.87
+}
+
+GMSC_METRICS = {
+    "Accuracy": 0.8855,
+    "AUC": 0.8235,
+    "Precision": 0.92,
+    "Recall": 0.89,
+    "F1 Score": 0.90
 }
 
 st.set_page_config(page_title="Credit Risk AI", layout="wide")
@@ -44,18 +52,31 @@ if st.sidebar.button("Logout"):
 
 # ---------------- MAIN ---------------- #
 st.title("💳 Credit Default Prediction Dashboard")
+
+
+dataset = st.selectbox("Select Dataset", ["AMEX", "GMSC"])
+# ---------------- SELECT METRICS ---------------- #
+if dataset == "AMEX":
+    METRICS = AMEX_METRICS
+else:
+    METRICS = GMSC_METRICS
+
+
+# ---------------- SHOW METRICS ---------------- #
+import streamlit.components.v1 as components
+
 st.markdown("## 📊 Model Quality Framework")
 
-cols = st.columns(6)
+cols = st.columns(len(METRICS))
 
-colors = ["#00e5ff", "#7c4dff", "#00e676", "#ffab00", "#ff9100", "#00e5ff"]
+colors = ["#00e5ff", "#7c4dff", "#00e676", "#ffab00", "#ff9100"]
 
 for i, ((metric, value), color) in enumerate(zip(METRICS.items(), colors)):
     percent = int(value * 100)
 
     with cols[i]:
-        st.components.v1.html(f"""
-        <div style="text-align:center; font-family:sans-serif;">
+        components.html(f"""
+        <div style="text-align:center;">
         
             <div style="
                 width:80px;
@@ -89,8 +110,6 @@ for i, ((metric, value), color) in enumerate(zip(METRICS.items(), colors)):
 
         </div>
         """, height=120)
-
-dataset = st.selectbox("Select Dataset", ["AMEX", "GMSC"])
 
 # ---------------- LOAD MODEL ---------------- #
 if dataset == "AMEX":
