@@ -55,16 +55,20 @@ for i, ((metric, value), color) in enumerate(zip(METRICS.items(), colors)):
         st.markdown(f"""
         <div style="
             text-align:center;
-            padding:10px;
+            padding:8px;
             border-radius:10px;
             background:#0f172a;
             color:white;
-            box-shadow:0 4px 15px rgba(0,0,0,0.3);
+            height:90px;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            box-shadow:0 2px 8px rgba(0,0,0,0.2);
         ">
-            <h2 style="color:{color}; margin:0;">
+            <h3 style="color:{color}; margin:0; font-size:18px;">
                 {int(value*100)}%
-            </h2>
-            <p style="margin:0; font-size:9px;">
+            </h3>
+            <p style="margin:0; font-size:11px;">
                 {metric}
             </p>
         </div>
